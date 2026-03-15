@@ -25,6 +25,7 @@ from models import (
 )
 from parsing import (
     extract_last_gold,
+    is_advanced_enhance_response,
     is_enhance_response,
     is_fusion_response,
     is_profile_response,
@@ -63,9 +64,10 @@ class GameActions:
         self,
         command: str,
         validator: Optional[Callable[[str], bool]] = None,
+        initial_delay: Optional[float] = None,
     ) -> str:
         self._io.send_command(command)
-        time.sleep(self._config.command_response_poll_delay)
+        time.sleep(initial_delay or self._config.command_response_poll_delay)
 
         last_log = ""
         for _ in range(self._config.max_response_wait_retry):
@@ -123,8 +125,23 @@ class GameActions:
     def advanced_enhance(
         self, current_weapon: Optional[WeaponState] = None
     ) -> ActionResult:
+        # 무기 상태 확인 — None이면 프로필에서 로드
+        weapon = current_weapon or self.load_weapon()
+        # +0에서만 사용 가능, 그 외 레벨은 일반 강화로 폴백
+        if (
+            not weapon
+            or weapon.level is None
+            or weapon.level != self._config.advanced_enhance_start_level
+        ):
+            level_str = f"+{weapon.level}" if weapon and weapon.level is not None else "+?"
+            self._logger.status(
+                f"상급강화 건너뜀 ({level_str} != +0) → 일반 강화"
+            )
+            return self.enhance(current_weapon=weapon)
         return self._run_enhance(
-            CMD_ADVANCED_ENHANCE, "advanced", current_weapon,
+            CMD_ADVANCED_ENHANCE, "advanced", weapon,
+            validator=is_advanced_enhance_response,
+            initial_delay=7.0,
         )
 
     def _run_enhance(
@@ -132,7 +149,25 @@ class GameActions:
         command: str,
         stat_type: str,
         current_weapon: Optional[WeaponState],
+        validator: Optional[Callable[[str], bool]] = None,
+        initial_delay: Optional[float] = None,
     ) -> ActionResult:
+        # 절대 가드: /상급강화는 +0에서만 전송
+        if command == CMD_ADVANCED_ENHANCE:
+            weapon = current_weapon or self.load_weapon()
+            if (
+                not weapon
+                or weapon.level is None
+                or weapon.level != self._config.advanced_enhance_start_level
+            ):
+                level_str = f"+{weapon.level}" if weapon and weapon.level is not None else "+?"
+                self._logger.status(f"상급강화 차단 ({level_str} != +0) → 일반 강화")
+                command = CMD_ENHANCE
+                stat_type = "normal"
+                current_weapon = weapon
+                validator = None
+                initial_delay = None
+
         start_level = (
             current_weapon.level
             if current_weapon and current_weapon.level is not None
@@ -142,7 +177,9 @@ class GameActions:
 
         for _ in range(self._config.max_action_retry):
             log = self.capture_response(
-                command, validator=is_enhance_response
+                command,
+                validator=validator or is_enhance_response,
+                initial_delay=initial_delay,
             )
             result = parse_enhance_result(log, self.is_hidden_candidate)
             last_result = result
@@ -151,6 +188,12 @@ class GameActions:
                 self._logger.status(f"{command} busy -> retry")
                 time.sleep(self._config.command_response_poll_delay)
                 continue
+
+            if result.outcome == "advanced_unavailable":
+                self._logger.status("상급강화 불가 → 일반 강화로 전환")
+                return self._run_enhance(
+                    CMD_ENHANCE, "normal", current_weapon,
+                )
 
             if (
                 start_level is not None
@@ -340,6 +383,8 @@ class GameActions:
             )
             return "target_reached", weapon
 
+        shard_spent = False
+
         while True:
             profile_state = None
             if (
@@ -349,11 +394,16 @@ class GameActions:
                 profile_state = self.load_profile()
                 weapon = profile_state.equipped or weapon
 
-            if allow_advanced and self.should_use_advanced(
-                weapon, profile_state, hidden_only=advanced_hidden_only
+            if (
+                allow_advanced
+                and not shard_spent
+                and self.should_use_advanced(
+                    weapon, profile_state, hidden_only=advanced_hidden_only
+                )
             ):
                 self._logger.status("상급강화 사용 (+0)")
                 result = self.advanced_enhance(current_weapon=weapon)
+                shard_spent = True
             else:
                 result = self.enhance(current_weapon=weapon)
 
@@ -363,9 +413,11 @@ class GameActions:
 
             weapon = self.resolve_weapon(result, weapon)
 
-            if stop_on_destroy and result.outcome == "destroy":
-                self._logger.status("파괴 → 재탐색")
-                return "destroyed", weapon
+            if result.outcome == "destroy":
+                shard_spent = False
+                if stop_on_destroy:
+                    self._logger.status("파괴 → 재탐색")
+                    return "destroyed", weapon
 
             if self.is_target_reached(
                 weapon, target_level, result.log

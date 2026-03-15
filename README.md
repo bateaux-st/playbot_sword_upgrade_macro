@@ -219,6 +219,22 @@ python -m pytest tests/ -v
 | `enhance_stats.json` | 실행 파일 옆 | 누적 강화 확률 통계 |
 | `weapon_catalog.csv` | 번들 내장 | 무기 이름→종류 매핑 |
 
+## Windows Sandbox 실행
+
+`sandbox.wsb`로 격리 환경에서 실행할 수 있습니다.
+
+### 사전 준비
+
+1. `dist/` 폴더에 [카카오톡 설치 파일](https://www.kakaocorp.com/page/service/service/KakaoTalk)(`KakaoTalk_Setup.exe`)을 다운로드
+2. `sandbox.wsb`의 `<HostFolder>`를 실제 `dist/` 폴더 경로로 수정
+
+### 실행 흐름
+
+1. `sandbox.wsb` 더블클릭 → 샌드박스 시작
+2. 카카오톡 설치가 자동 실행됨
+3. 설치 완료 후 매크로가 자동 실행됨 (왼쪽 절반 배치)
+4. 카카오톡 로그인 → 채팅방 열기 → 매크로 사용
+
 ## 원본 출처
 
 이 프로젝트는 [KEY의 일기장](https://blog.naver.com/ableyoung/224132261950)에서 공유된 `검키우기_통합판v10.2.py` 소스코드를 기반으로 개발되었습니다.

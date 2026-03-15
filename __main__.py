@@ -4,7 +4,19 @@ import sys
 import time
 
 
+def _enable_vt_processing() -> None:
+    """콘솔에서 ANSI 이스케이프 시퀀스를 처리하도록 활성화한다."""
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+    mode = ctypes.c_ulong()
+    if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+        mode.value |= 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        kernel32.SetConsoleMode(handle, mode)
+
+
 def setup_stdio() -> None:
+    _enable_vt_processing()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(
             encoding="utf-8", line_buffering=True, write_through=True
@@ -64,6 +76,7 @@ def main() -> None:
 
         keyboard.add_hotkey("F8", lambda: _on_pause(state, logger))
         keyboard.add_hotkey("F9", lambda: _on_restart(state, logger))
+        keyboard.add_hotkey("F3", lambda: logger.toggle_stats_tab())
     except Exception as e:
         logger.status(f"단축키 등록 실패: {e}")
     try:
@@ -110,7 +123,7 @@ def main() -> None:
                 config.fixed_x = input_x
                 config.fixed_y = input_y
                 config.save(config_path)
-            log_start_y = input_y - 600
+            log_start_y = input_y - config.drag_offset
             chat_io = KakaoTalkIO(
                 input_x, input_y, log_start_y, config, state
             )

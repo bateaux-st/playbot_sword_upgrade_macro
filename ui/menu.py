@@ -1,5 +1,6 @@
 """Console menu rendering and input handling."""
 from typing import Optional
+from __init__ import __version__
 from config import AppConfig
 from constants import MODE_FUSION, MODE_HIDDEN, MODE_MONEY, MODE_TARGET
 from stats import EnhanceStats
@@ -19,7 +20,7 @@ class MainMenu:
                 else "미설정"
             )
             print("\n" * 3)
-            print("=== 카카오톡 검키우기 v11.0 ===")
+            print(f"=== 카카오톡 검키우기 v{__version__} ===")
             print(f"   [자산] 최소 골드: {cfg.min_gold_limit:,}G")
             print(f"   [좌표] 입력창: {pos_str}")
             print("---------------------------------------")
@@ -55,7 +56,9 @@ class MainMenu:
             print(f"1. 최소 골드 ({cfg.min_gold_limit}G)")
             print(f"2. 좌표 설정 ({pos_str})")
             print("3. 좌표 초기화")
-            print("4. 뒤로 가기")
+            print(f"4. 드래그 범위 ({cfg.drag_offset}px)")
+            print(f"5. 응답 대기 ({cfg.command_response_poll_delay}초)")
+            print("6. 뒤로 가기")
             opt = input("변경할 번호: ").strip()
             if opt == "1":
                 try:
@@ -74,12 +77,55 @@ class MainMenu:
                 cfg.fixed_y = None
                 cfg.save(config_path)
                 print("  좌표 초기화됨")
-            elif opt in {"4", ""}:
+            elif opt == "4":
+                try:
+                    cfg.drag_offset = int(input("값(기본 550): "))
+                    cfg.save(config_path)
+                except (ValueError, OSError):
+                    pass
+            elif opt == "5":
+                result = self.adjust_float_value(
+                    cfg.command_response_poll_delay, 0.1, 10.0, 0.1
+                )
+                if result is not None:
+                    cfg.command_response_poll_delay = result
+                    cfg.save(config_path)
+            elif opt in {"6", ""}:
                 break
 
     def show_stats(self) -> None:
         print(self._stats.format_report())
         input("\n 엔터를 누르면 메뉴로 돌아갑니다...")
+
+    @staticmethod
+    def adjust_float_value(
+        current: float, min_val: float, max_val: float, step: float
+    ) -> Optional[float]:
+        import time
+        import keyboard as kb
+
+        value = current
+        print(f"[값 조정] ↑↓: ±{step} / 숫자 직접 입력 / 엔터: 확정 / ESC: 취소")
+        while kb.is_pressed("enter") or kb.is_pressed("esc"):
+            time.sleep(0.05)
+
+        while True:
+            print(f"\r  현재 값: {value:.1f}초     ", end="", flush=True)
+            if kb.is_pressed("up"):
+                value = min(max_val, round(value + step, 1))
+                while kb.is_pressed("up"):
+                    time.sleep(0.05)
+            elif kb.is_pressed("down"):
+                value = max(min_val, round(value - step, 1))
+                while kb.is_pressed("down"):
+                    time.sleep(0.05)
+            elif kb.is_pressed("enter"):
+                print(f"\n  확정: {value:.1f}초")
+                return value
+            elif kb.is_pressed("esc"):
+                print("\n  취소됨")
+                return None
+            time.sleep(0.05)
 
     @staticmethod
     def capture_input_position() -> Optional[tuple[int, int]]:

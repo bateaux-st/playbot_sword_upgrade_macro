@@ -105,6 +105,11 @@ def parse_enhance_result(
     if "골드가 부족해" in log:
         result.outcome = "no_gold"
         return result
+    if "상급강화가 불가능한" in log:
+        result.outcome = "advanced_unavailable"
+        result.weapon = parse_weapon_text(log)
+        result.is_hidden = is_hidden_fn(result.weapon)
+        return result
     if "강화 성공" in log:
         result.outcome = "success"
     elif "강화 유지" in log:
@@ -175,6 +180,16 @@ def is_profile_response(log: str) -> bool:
     return BOT_TAG in log or "● 장착 검:" in log
 
 
+def is_advanced_enhance_response(log: str) -> bool:
+    """상급강화 결과 확인 (중간 대사 제외, 실제 결과만 매칭)."""
+    if "상급강화가 불가능한" in log:
+        return True
+    if "상급강화" in log and "획득 검:" in log:
+        return True
+    # 일반 강화 결과도 매칭 (폴백)
+    return any(m in log for m in ("강화 성공", "강화 유지", "강화 파괴", "골드가 부족해"))
+
+
 def is_enhance_response(log: str) -> bool:
     markers = (
         "강화 성공",
@@ -183,6 +198,7 @@ def is_enhance_response(log: str) -> bool:
         "강화 중이니 잠깐 기다리도록",
         "골드가 부족해",
         "상급강화",
+        "상급강화가 불가능한",
     )
     return any(marker in log for marker in markers)
 

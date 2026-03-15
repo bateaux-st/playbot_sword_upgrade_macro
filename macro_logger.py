@@ -1,17 +1,40 @@
 """Unified logging with rich TUI — fixed header/footer, scrolling log body."""
+import os
 import time
 from collections import deque
 from typing import Optional
 from rich.console import Console, Group
-from rich.layout import Layout
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from __init__ import __version__
 from constants import get_mode_label
 from models import WeaponState, describe_weapon, format_metric
 from state import AppState
 from stats import EnhanceStats
+
+
+def _get_console_size() -> tuple[int, int]:
+    """Win32 API로 실제 콘솔 크기를 가져온다."""
+    try:
+        import ctypes
+        import ctypes.wintypes
+        h = ctypes.windll.kernel32.GetStdHandle(-11)
+        info = ctypes.create_string_buffer(22)
+        if ctypes.windll.kernel32.GetConsoleScreenBufferInfo(h, info):
+            import struct
+            _, _, _, _, _, left, top, right, bottom, _, _ = struct.unpack(
+                "hhhhHhhhhhh", info.raw
+            )
+            return right - left + 1, bottom - top + 1
+    except Exception:
+        pass
+    try:
+        size = os.get_terminal_size()
+        return size.columns, size.lines
+    except OSError:
+        return 120, 30
 
 MAX_LOG_LINES = 200
 
@@ -20,7 +43,13 @@ class MacroLogger:
     def __init__(self, state: AppState, stats: Optional["EnhanceStats"] = None) -> None:
         self._state = state
         self._stats = stats
-        self._console = Console()
+        width, height = _get_console_size()
+        self._console = Console(
+            legacy_windows=False,
+            force_terminal=True,
+            width=width,
+            height=height,
+        )
         self._live: Optional[Live] = None
         self._log_lines: deque[str] = deque(maxlen=MAX_LOG_LINES)
         # Header state
@@ -33,14 +62,13 @@ class MacroLogger:
         self._gold: Optional[int] = None
         self._shards: Optional[int] = None
         self._paused: bool = False
+        self._stats_tab: int = 0  # 0=일반, 1=상급
     # ── Public API (unchanged interface) ──
 
     def status(self, msg: str) -> None:
         line = f"[{time.strftime('%H:%M:%S')}] {msg}"
         self._log_lines.append(line)
-        if self._live is not None:
-            self._refresh()
-        else:
+        if self._live is None:
             print(line, flush=True)
 
     def timeline(self, kind: str, message: str) -> None:
@@ -83,21 +111,25 @@ class MacroLogger:
             self._gold = gold
         if shards is not None:
             self._shards = shards
-        if self._live is not None:
-            self._refresh()
 
     def update_pause_state(self, paused: bool) -> None:
         self._paused = paused
-        if self._live is not None:
-            self._refresh()
+
+    def toggle_stats_tab(self) -> None:
+        self._stats_tab = 1 - self._stats_tab
     # ── Live display lifecycle ──
 
     def start_live(self) -> None:
+        width, height = _get_console_size()
+        self._console.width = width
+        self._console.height = height
         self._live = Live(
-            self._build_layout(),
+            self._build_display(),
             console=self._console,
-            refresh_per_second=4,
-            screen=True,
+            refresh_per_second=2,
+            screen=False,
+            vertical_overflow="crop",
+            get_renderable=self._build_display,
         )
         self._live.start()
 
@@ -107,31 +139,20 @@ class MacroLogger:
             self._live = None
     # ── Layout building ──
 
-    def _refresh(self) -> None:
-        if self._live is not None:
-            self._live.update(self._build_layout())
+    def _build_display(self) -> Group:
+        from rich.columns import Columns
 
-    def _build_layout(self) -> Layout:
-        layout = Layout()
-        layout.split_column(
-            Layout(name="header", size=5),
-            Layout(name="body"),
-            Layout(name="footer", size=3),
-        )
-        layout["header"].update(self._build_header())
+        header = self._build_header()
+        log_panel = self._build_log_panel()
+        footer = self._build_footer()
+
         if self._stats is not None:
-            body = Layout()
-            body.split_row(
-                Layout(name="log", ratio=3),
-                Layout(name="stats", ratio=1, minimum_size=30),
-            )
-            body["log"].update(self._build_log_panel())
-            body["stats"].update(self._build_stats_panel())
-            layout["body"].update(body)
+            stats_panel = self._build_stats_panel()
+            body = Columns([log_panel, stats_panel], expand=True)
         else:
-            layout["body"].update(self._build_log_panel())
-        layout["footer"].update(self._build_footer())
-        return layout
+            body = log_panel
+
+        return Group(header, body, footer)
 
     def _build_header(self) -> Panel:
         table = Table.grid(padding=(0, 2))
@@ -156,7 +177,7 @@ class MacroLogger:
             f"📦 보관: [yellow]{describe_weapon(self._stored)}[/]",
             f"🌠 파편: [magenta]{format_metric(self._shards)}[/]개",
         )
-        return Panel(table, title="검키우기 v11.0", border_style="blue")
+        return Panel(table, title=f"검키우기 v{__version__}", border_style="blue")
 
     def _build_log_panel(self) -> Panel:
         visible_lines = list(self._log_lines)
@@ -173,22 +194,24 @@ class MacroLogger:
     def _build_stats_panel(self) -> Panel:
         if self._stats is None:
             return Panel(Text("(통계 없음)", style="dim"), title="강화 확률", border_style="dim")
-        lines: list[str] = []
-        for title, mode_key in (("일반", "normal"), ("상급", "advanced")):
-            rows = self._stats.get_transition_rows(mode_key)
-            if not rows:
-                continue
-            lines.append(f"[bold]{title}[/]")
-            current_start = None
+
+        tabs = [("일반", "normal"), ("상급", "advanced")]
+        _, mode_key = tabs[self._stats_tab]
+        tab_header = "  ".join(
+            f"[bold reverse] {t} [/]" if i == self._stats_tab else f"[dim] {t} [/]"
+            for i, (t, _) in enumerate(tabs)
+        )
+
+        lines: list[str] = [f"{tab_header}  [dim](F3 전환)[/]", ""]
+        rows = self._stats.get_transition_rows(mode_key)
+        if rows:
             for row in rows:
-                if current_start != row["start"]:
-                    current_start = row["start"]
-                    lines.append(f" +{current_start} ({row['attempts']:,}회)")
-                lines.append(
-                    f"  →+{row['end']}: "
-                    f"{row['count']:,}/{row['attempts']:,} "
-                    f"({row['rate']:.1f}%)"
-                )
+                if row["end"] == row["start"] + 1:
+                    lines.append(
+                        f" +{row['start']} → +{row['end']} "
+                        f"{row['count']:,}/{row['attempts']:,} "
+                        f"({row['rate']:.1f}%)"
+                    )
         if not lines:
             content = Text("(기록 없음)", style="dim")
         else:

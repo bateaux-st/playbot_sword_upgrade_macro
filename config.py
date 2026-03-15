@@ -10,8 +10,9 @@ class AppConfig:
     min_gold_limit: int = 0
     fixed_x: Optional[int] = None
     fixed_y: Optional[int] = None
+    drag_offset: int = 550
     max_action_retry: int = 3
-    command_response_poll_delay: float = 0.8
+    command_response_poll_delay: float = 3.0
     max_response_wait_retry: int = 8
     log_capture_expand_step: int = 140
     max_log_capture_expand_retry: int = 4
@@ -24,6 +25,7 @@ class AppConfig:
         "MIN_GOLD_LIMIT": "min_gold_limit",
         "FIXED_X": "fixed_x",
         "FIXED_Y": "fixed_y",
+        "DRAG_OFFSET": "drag_offset",
         "MAX_ACTION_RETRY": "max_action_retry",
         "COMMAND_RESPONSE_POLL_DELAY": "command_response_poll_delay",
         "MAX_RESPONSE_WAIT_RETRY": "max_response_wait_retry",
