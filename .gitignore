@@ -17,5 +17,8 @@ enhance_stats.json
 # Test fixtures (개인정보 포함)
 tests/fixtures/*.txt
 
+# Windows Sandbox (개인 경로 포함)
+sandbox.wsb
+
 # Claude Code
 .claude/
