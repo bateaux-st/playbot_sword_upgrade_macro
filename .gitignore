@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PyInstaller
+build/
+dist/
+
+# pytest
+.pytest_cache/
+
+# Config & runtime data
+sword_config.json
+enhance_stats.json
+
+# Test fixtures (개인정보 포함)
+tests/fixtures/*.txt
+
+# Claude Code
+.claude/
