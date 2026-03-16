@@ -110,10 +110,8 @@ class WeaponCatalog:
         target_level: int,
         log: str = "",
     ) -> bool:
-        if (
-            weapon
+        return (
+            weapon is not None
             and weapon.level is not None
             and weapon.level >= target_level
-        ):
-            return True
-        return f"[+{target_level}]" in log
+        )

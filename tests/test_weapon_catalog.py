@@ -133,9 +133,10 @@ class TestTargetReached:
         weapon = WeaponState(level=5, name="\uac80")
         assert catalog.is_target_reached(weapon, 10) is False
 
-    def test_reached_by_log(self, catalog):
+    def test_log_ignored(self, catalog):
+        """로그에 [+10]이 있어도 weapon.level이 미달이면 False."""
         weapon = WeaponState(level=3, name="\uac80")
-        assert catalog.is_target_reached(weapon, 10, "[+10] \uac80") is True
+        assert catalog.is_target_reached(weapon, 10, "[+10] \uac80") is False
 
     def test_none_weapon(self, catalog):
         assert catalog.is_target_reached(None, 10) is False
