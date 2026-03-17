@@ -15,8 +15,22 @@ def _enable_vt_processing() -> None:
         kernel32.SetConsoleMode(handle, mode)
 
 
+def _ensure_console_size(min_cols: int = 120, min_lines: int = 50) -> None:
+    """콘솔 크기가 최소값 미만이면 강제로 설정한다."""
+    import os
+    try:
+        size = os.get_terminal_size()
+        cols = max(size.columns, min_cols)
+        lines = max(size.lines, min_lines)
+        if size.columns < min_cols or size.lines < min_lines:
+            os.system(f"mode con: cols={cols} lines={lines}")
+    except OSError:
+        os.system(f"mode con: cols={min_cols} lines={min_lines}")
+
+
 def setup_stdio() -> None:
     _enable_vt_processing()
+    _ensure_console_size()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(
             encoding="utf-8", line_buffering=True, write_through=True

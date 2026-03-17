@@ -387,8 +387,11 @@ class GameActions:
 
         while True:
             profile_state = None
+            # 프로필은 상급강화 판단이 필요할 때만 조회
             if (
-                weapon
+                allow_advanced
+                and not shard_spent
+                and weapon
                 and weapon.level == self.advanced_enhance_start_level
             ):
                 profile_state = self.load_profile()
@@ -415,6 +418,9 @@ class GameActions:
 
             if result.outcome == "destroy":
                 shard_spent = False
+                # 파괴 응답에서 무기 파싱 실패 시 +0 기본값
+                if weapon is None or weapon.level is None:
+                    weapon = WeaponState(level=0, name=None)
                 if stop_on_destroy:
                     self._logger.status("파괴 → 재탐색")
                     return "destroyed", weapon

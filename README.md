@@ -1,8 +1,8 @@
-# playbot_macro v11.0
+# 플레이봇 검키우기 자동 강화 매크로 v11.2.1
 
 카카오톡 **플레이봇 검키우기** 게임 자동 강화 매크로.
 
-카카오톡 채팅창에 게임 명령어(`/강화`, `/판매`, `/합성` 등)를 자동 입력하고, 채팅 로그를 읽어 결과를 파싱한 뒤 다음 행동을 결정합니다.
+카카오톡 채팅창에 게임 명령어(`@플레이봇 강화`, `@플레이봇 판매` 등)를 자동 입력하고, 채팅 로그를 읽어 결과를 파싱한 뒤 다음 행동을 결정합니다.
 
 ## 주요 기능
 
@@ -20,7 +20,7 @@
 - 카카오톡 PC버전
 
 ```
-pip install pyautogui pyperclip keyboard
+pip install pyautogui pyperclip keyboard rich
 ```
 
 ## 실행
@@ -38,26 +38,27 @@ pyinstaller playbot_sword_upgrade.spec
 1. 카카오톡에서 플레이봇이 있는 채팅방을 엽니다.
 2. 매크로를 실행하고 모드를 선택합니다.
 3. 목표 강화 레벨을 입력합니다 (21강 만들기는 자동 +20).
-4. 채팅 입력창에 마우스를 올려놓고 3초 대기 (또는 좌표 고정 모드 사용).
+4. 채팅 입력창을 클릭하여 좌표를 설정합니다 (ESC로 취소 가능).
 5. 매크로가 자동으로 명령어를 입력하고 결과를 처리합니다.
 
 ### 단축키
 
 | 키 | 동작 |
 |---|---|
+| **F3** | 강화 확률 일반/상급 전환 |
 | **F8** | 일시정지 / 재개 |
 | **F9** | 메뉴로 복귀 |
 | **마우스 모서리** | 긴급 중지 (pyautogui failsafe) |
 
 ### 옵션 설정
 
-메뉴 4번에서 조정 가능:
+메뉴에서 조정 가능:
 
-- **감속 시작 레벨**: 이 레벨부터 강화 딜레이 증가 (기본 9강)
-- **일반/고강 속도**: 강화 대기 시간 (기본 2.7초 / 4.5초)
 - **최소 골드**: 이 금액 이하 시 자동 중지
-- **클립보드 안전 시간**: 렉 발생 시 0.5 이상으로 조정
 - **좌표 고정**: 매번 마우스 위치를 지정하지 않고 저장된 좌표 사용
+- **좌표 재설정**: 입력창을 클릭하여 좌표 재지정
+- **드래그 범위**: 채팅 로그 복사 시 드래그 높이 (기본 550px)
+- **응답 대기 시간**: 명령어 전송 후 응답 대기 시간 (기본 3.0초)
 
 ## 모드별 흐름도
 
@@ -73,9 +74,8 @@ flowchart TD
     ADV -- No --> EN[/강화/]
     AE --> RES{결과}
     EN --> RES
-    RES -- 성공 --> CHK
-    RES -- 유지 --> CHK
-    RES -- 파괴 --> CHK
+    RES -- 성공/유지 --> CHK
+    RES -- 파괴 --> EN
     RES -- 골드부족 --> STOP([중지])
 ```
 
@@ -139,6 +139,7 @@ flowchart TD
 
 ```
 __main__.py               # 엔트리포인트 (stdio, hotkey, 메인 루프)
+__init__.py               # 버전 정보 (__version__)
 actions.py                # 게임 액션 (강화, 판매, 합성, 프로필 등)
 parsing.py                # 채팅 로그 파서 (순수 함수, I/O 없음)
 config.py                 # AppConfig 데이터클래스
@@ -146,14 +147,14 @@ state.py                  # AppState (threading.Event 기반 스레드 안전)
 stats.py                  # 강화 통계 (메모리 누적, 세션 종료 시 저장)
 models.py                 # WeaponState, ProfileState, ActionResult
 constants.py              # 명령어/모드 상수
-macro_logger.py           # 통합 로깅
+macro_logger.py           # Rich 기반 TUI 대시보드
 weapon_catalog.py         # 무기 카탈로그 (CSV 기반 히든/일반 분류)
 paths.py                  # PyInstaller 경로 해석
 playbot_sword_upgrade.spec  # PyInstaller 빌드 설정
 weapon_catalog.csv        # 무기 데이터 (2,400+ 항목)
 chat_io/
   protocol.py             # ChatIO 추상 인터페이스
-  kakaotalk.py            # pyautogui+pyperclip 구현체
+  kakaotalk.py            # pyautogui+pyperclip 구현체 (2단계 멘션 입력)
 modes/
   base.py                 # BaseMode + MODE_REGISTRY 디스패치
   target.py               # 목표 강화 모드
@@ -202,7 +203,7 @@ pip install pytest
 python -m pytest tests/ -v
 ```
 
-165개 테스트 커버:
+163개 테스트 커버:
 - 채팅 로그 파싱 (실제 카톡 메시지 기반)
 - 무기 카탈로그 히든/일반 분류
 - 설정 로드/저장 라운드트립
@@ -221,12 +222,30 @@ python -m pytest tests/ -v
 
 ## Windows Sandbox 실행
 
-`sandbox.wsb`로 격리 환경에서 실행할 수 있습니다.
+격리 환경에서 실행하려면 `sandbox.wsb`를 직접 작성하세요.
+
+### sandbox.wsb 템플릿
+
+```xml
+<Configuration>
+    <vGpu>Enable</vGpu>
+    <MappedFolders>
+        <MappedFolder>
+            <HostFolder>C:\your\path\to\dist</HostFolder>
+            <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\PlaybotMacro</SandboxFolder>
+            <ReadOnly>false</ReadOnly>
+        </MappedFolder>
+    </MappedFolders>
+    <LogonCommand>
+        <Command>C:\Users\WDAGUtilityAccount\Desktop\PlaybotMacro\startup.cmd</Command>
+    </LogonCommand>
+</Configuration>
+```
 
 ### 사전 준비
 
 1. `dist/` 폴더에 [카카오톡 설치 파일](https://www.kakaocorp.com/page/service/service/KakaoTalk)(`KakaoTalk_Setup.exe`)을 다운로드
-2. `sandbox.wsb`의 `<HostFolder>`를 실제 `dist/` 폴더 경로로 수정
+2. 템플릿의 `<HostFolder>`를 실제 `dist/` 폴더 경로로 수정하여 `sandbox.wsb`로 저장
 
 ### 실행 흐름
 
