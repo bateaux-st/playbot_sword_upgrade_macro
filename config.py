@@ -20,6 +20,8 @@ class AppConfig:
     advanced_enhance_shard_cost: int = 10
     log_buffer_size: int = 3000
     max_log_fail: int = 10
+    enable_remote_control: bool = False
+    remote_poll_interval: float = 5.0
 
     _KEY_MAP: ClassVar[dict[str, str]] = {
         "MIN_GOLD_LIMIT": "min_gold_limit",
@@ -35,6 +37,8 @@ class AppConfig:
         "ADVANCED_ENHANCE_SHARD_COST": "advanced_enhance_shard_cost",
         "LOG_BUFFER_SIZE": "log_buffer_size",
         "MAX_LOG_FAIL": "max_log_fail",
+        "ENABLE_REMOTE_CONTROL": "enable_remote_control",
+        "REMOTE_POLL_INTERVAL": "remote_poll_interval",
     }
 
     @classmethod

@@ -58,7 +58,9 @@ class MainMenu:
             print("3. 좌표 초기화")
             print(f"4. 드래그 범위 ({cfg.drag_offset}px)")
             print(f"5. 응답 대기 ({cfg.command_response_poll_delay}초)")
-            print("6. 뒤로 가기")
+            rc = "ON" if cfg.enable_remote_control else "OFF"
+            print(f"6. 원격 제어 ({rc})")
+            print("7. 뒤로 가기")
             opt = input("변경할 번호: ").strip()
             if opt == "1":
                 try:
@@ -90,7 +92,12 @@ class MainMenu:
                 if result is not None:
                     cfg.command_response_poll_delay = result
                     cfg.save(config_path)
-            elif opt in {"6", ""}:
+            elif opt == "6":
+                cfg.enable_remote_control = not cfg.enable_remote_control
+                cfg.save(config_path)
+                rc = "ON" if cfg.enable_remote_control else "OFF"
+                print(f"  원격 제어: {rc}")
+            elif opt in {"7", ""}:
                 break
 
     def show_stats(self) -> None:

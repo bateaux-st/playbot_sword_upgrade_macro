@@ -62,6 +62,8 @@ class MacroLogger:
         self._gold: Optional[int] = None
         self._shards: Optional[int] = None
         self._paused: bool = False
+        self._paused_remote: bool = False
+        self._remote_control: bool = False
         self._stats_tab: int = 0  # 0=일반, 1=상급
     # ── Public API (unchanged interface) ──
 
@@ -112,8 +114,12 @@ class MacroLogger:
         if shards is not None:
             self._shards = shards
 
-    def update_pause_state(self, paused: bool) -> None:
+    def update_pause_state(self, paused: bool, remote: bool = False) -> None:
         self._paused = paused
+        self._paused_remote = remote if paused else False
+
+    def update_remote_state(self, enabled: bool) -> None:
+        self._remote_control = enabled
 
     def toggle_stats_tab(self) -> None:
         self._stats_tab = 1 - self._stats_tab
@@ -221,7 +227,9 @@ class MacroLogger:
         return Panel(content, title="강화 확률", border_style="dim")
 
     def _build_footer(self) -> Panel:
-        if self._paused:
+        if self._paused and self._paused_remote:
+            status_text = Text("📡 원격대기", style="bold cyan")
+        elif self._paused:
             status_text = Text("⏸ 일시정지", style="bold yellow")
         else:
             status_text = Text("▶ 실행중", style="bold green")
@@ -229,9 +237,13 @@ class MacroLogger:
         footer.add_column()
         footer.add_column()
         footer.add_column()
+        footer.add_column()
+        footer.add_column()
         footer.add_row(
             status_text,
+            Text("F7 정지후 원격 대기", style="dim"),
             Text("F8 일시정지/재개", style="dim"),
             Text("F9 메뉴복귀", style="dim"),
+            Text("📡 원격제어", style="dim cyan") if self._remote_control else Text(""),
         )
         return Panel(footer, border_style="blue")

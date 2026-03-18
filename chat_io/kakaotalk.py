@@ -2,6 +2,7 @@
 
 import ctypes
 import ctypes.wintypes
+import threading
 import time
 
 import pyautogui
@@ -44,10 +45,15 @@ class KakaoTalkIO(ChatIO):
         self._config = config
         self._state = state
         self._window_top = _get_window_top(input_x, input_y) + _KAKAOTALK_HEADER_HEIGHT
+        self._io_lock = threading.Lock()
+        self._last_log: str = ""
 
     def send_command(self, text: str) -> None:
         self._state.check_interrupts()
+        with self._io_lock:
+            self._send_command_impl(text)
 
+    def _send_command_impl(self, text: str) -> None:
         pyautogui.click(self._input_x, self._input_y)
         pyautogui.hotkey("ctrl", "a")
         time.sleep(0.05)
@@ -77,7 +83,6 @@ class KakaoTalkIO(ChatIO):
         """클립보드를 통해 텍스트를 붙여넣는다."""
         pyperclip.copy("")
         for _ in range(5):
-            self._state.check_interrupts()
             pyperclip.copy(text)
             time.sleep(0.05)
             current_clip = pyperclip.paste().strip()
@@ -91,8 +96,15 @@ class KakaoTalkIO(ChatIO):
 
     def read_chat_log(self) -> str:
         self._state.check_interrupts()
+        with self._io_lock:
+            return self._read_chat_log_impl()
 
-        previous_clipboard = pyperclip.paste()
+    def read_chat_log_no_interrupt(self) -> str:
+        """Read chat log without checking interrupts. For background poller."""
+        with self._io_lock:
+            return self._read_chat_log_impl()
+
+    def _read_chat_log_impl(self) -> str:
         last_log = ""
 
         for attempt in range(self._config.max_log_capture_expand_retry + 1):
@@ -101,20 +113,32 @@ class KakaoTalkIO(ChatIO):
                 self._log_start_y
                 - (attempt * self._config.log_capture_expand_step),
             )
+            pyperclip.copy("")
             log = self._drag_copy(adjusted_start_y)
             last_log = log
 
-            if log.strip() and log != previous_clipboard:
-                return log[-self._config.log_buffer_size :]
+            if log.strip():
+                self._last_log = log[-self._config.log_buffer_size :]
+                return self._last_log
 
-            if attempt < self._config.max_log_capture_expand_retry and (
-                not log.strip() or log == previous_clipboard
-            ):
+            if attempt < self._config.max_log_capture_expand_retry:
                 time.sleep(0.1)
                 continue
             break
 
         return last_log[-self._config.log_buffer_size :] if last_log else ""
+
+    @property
+    def last_log(self) -> str:
+        return self._last_log
+
+    def send_text_no_interrupt(self, text: str) -> None:
+        """Send plain text without checking interrupts. For poller use."""
+        with self._io_lock:
+            pyautogui.click(self._input_x, self._input_y)
+            self._paste_text(text)
+            time.sleep(0.1)
+            pyautogui.press("enter")
 
     def get_mouse_position(self) -> tuple[int, int]:
         return pyautogui.position()

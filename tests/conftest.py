@@ -20,12 +20,24 @@ class FakeChatIO(ChatIO):
     def __init__(self, responses: Optional[list[str]] = None) -> None:
         self._responses: deque[str] = deque(responses or [])
         self.commands_sent: list[str] = []
+        self._last_log: str = ""
+        self.texts_sent: list[str] = []
 
     def send_command(self, text: str) -> None:
         self.commands_sent.append(text)
 
     def read_chat_log(self) -> str:
-        return self._responses.popleft() if self._responses else ""
+        log = self._responses.popleft() if self._responses else ""
+        if log:
+            self._last_log = log
+        return log
+
+    @property
+    def last_log(self) -> str:
+        return self._last_log
+
+    def send_text_no_interrupt(self, text: str) -> None:
+        self.texts_sent.append(text)
 
     def get_mouse_position(self) -> tuple[int, int]:
         return (500, 500)
@@ -35,6 +47,9 @@ class FakeChatIO(ChatIO):
 
     def add_responses(self, texts: list[str]) -> None:
         self._responses.extend(texts)
+
+    def set_last_log(self, text: str) -> None:
+        self._last_log = text
 
 
 @pytest.fixture

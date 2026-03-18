@@ -9,6 +9,7 @@ class AppState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._paused: bool = False
+        self._paused_remote: bool = False
         self._restart_requested: bool = False
         self._timeline_step: int = 0
         self._unpause_event = threading.Event()
@@ -19,12 +20,19 @@ class AppState:
         with self._lock:
             return self._paused
 
-    def toggle_pause(self) -> bool:
+    @property
+    def paused_remote(self) -> bool:
+        with self._lock:
+            return self._paused_remote
+
+    def toggle_pause(self, remote: bool = False) -> bool:
         with self._lock:
             self._paused = not self._paused
             if self._paused:
+                self._paused_remote = remote
                 self._unpause_event.clear()
             else:
+                self._paused_remote = False
                 self._unpause_event.set()
             return self._paused
 
@@ -43,6 +51,7 @@ class AppState:
         with self._lock:
             self._restart_requested = False
             self._paused = False
+            self._paused_remote = False
             self._unpause_event.set()
 
     @property

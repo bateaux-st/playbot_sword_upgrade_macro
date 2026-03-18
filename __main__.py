@@ -1,4 +1,6 @@
 """Entry point — stdio setup, hotkeys, main loop."""
+from __future__ import annotations
+
 import io
 import sys
 import time
@@ -88,6 +90,7 @@ def main() -> None:
     try:
         import keyboard
 
+        keyboard.add_hotkey("F7", lambda: _on_remote_standby(state, logger))
         keyboard.add_hotkey("F8", lambda: _on_pause(state, logger))
         keyboard.add_hotkey("F9", lambda: _on_restart(state, logger))
         keyboard.add_hotkey("F3", lambda: logger.toggle_stats_tab())
@@ -151,6 +154,27 @@ def main() -> None:
                 getattr(params, "auto_sell", False),
             )
             logger.start_live()
+            poller = None
+            if config.enable_remote_control:
+                from remote_control import RemoteCommandPoller
+
+                poller = RemoteCommandPoller(
+                    chat_io,
+                    state,
+                    poll_interval=config.remote_poll_interval,
+                    on_pause=lambda: (
+                        logger.update_pause_state(True),
+                        logger.status("⏸ 원격 일시정지 (#일시정지)"),
+                    ),
+                    on_resume=lambda: (
+                        logger.update_pause_state(False),
+                        logger.status("▶ 원격 재개 (#재개)"),
+                    ),
+                    on_stop=lambda: logger.status("🔄 원격 중단 (#중단)"),
+                )
+                poller.start()
+                logger.update_remote_state(True)
+                logger.status("📡 원격 제어 활성화")
             try:
                 mode_cls = MODE_REGISTRY[mode_id]
                 mode_cls(actions, logger, params).run()
@@ -166,6 +190,9 @@ def main() -> None:
                 input("\n엔터를 누르면 메뉴로 돌아갑니다...")
                 continue
             finally:
+                if poller is not None:
+                    poller.stop()
+                    logger.update_remote_state(False)
                 logger.stop_live()
                 stats.flush(stats_path)
             if input("R 입력 시 재시작: ").lower() != "r":
@@ -180,6 +207,15 @@ def main() -> None:
         input("\n엔터를 누르면 종료합니다...")
     finally:
         stats.flush(stats_path)
+
+
+def _on_remote_standby(state: "AppState", logger: "MacroLogger") -> None:
+    is_paused = state.toggle_pause(remote=True)
+    logger.update_pause_state(is_paused, remote=True)
+    if is_paused:
+        logger.status("📡 원격 대기 (정지 후 원격 재개 대기)")
+    else:
+        logger.status("▶ 재개")
 
 
 def _on_pause(state: "AppState", logger: "MacroLogger") -> None:

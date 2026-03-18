@@ -97,6 +97,11 @@ GAME_COMMANDS = (
 GAME_COMMAND_MAP = {item["key"]: item for item in GAME_COMMANDS}
 TRASH_WEAPON_KEYWORDS = ("낡은 검", "낡은 몽둥이", "낡은 도끼", "낡은 망치")
 
+# 원격 제어 커맨드 (모바일에서 채팅으로 전송)
+REMOTE_CMD_PAUSE = "#일시정지"
+REMOTE_CMD_RESUME = "#재개"
+REMOTE_CMD_STOP = "#중단"
+
 
 def get_mode_label(mode: str) -> str:
     return {
